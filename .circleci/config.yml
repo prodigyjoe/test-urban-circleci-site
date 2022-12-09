@@ -70,17 +70,17 @@ jobs: #collections of steps, which run commands/scripts as required. key(name of
 
       - checkout  #checkout project source code into the job’s working_directory
 
-      - restore_cache: # special step to restore the dependency cache if `composer.lock` does not change
-          keys:
-            - composer-v1-{{ checksum "composer.lock" }}
-            # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
-            - composer-v1-
+      # - restore_cache: # special step to restore the dependency cache if `composer.lock` does not change
+      #     keys:
+      #       - composer-v1-{{ checksum "composer.lock" }}
+      #       # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
+      #       - composer-v1-
 
-      - restore_cache: # special step to restore the dependency cache if `package-lock.json` does not change
-          keys:
-            - node-v1-{{ checksum "package-lock.json" }}
-            # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
-            - node-v1-
+      # - restore_cache: # special step to restore the dependency cache if `package-lock.json` does not change
+      #     keys:
+      #       - node-v1-{{ checksum "package-lock.json" }}
+      #       # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
+      #       - node-v1-
 
       - run:  #Invoke all command-line programs
           name: Install Composer  #Title of the step to be shown in the CircleCI UI
