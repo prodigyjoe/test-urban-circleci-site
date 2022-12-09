@@ -1,10 +1,131 @@
 version: 2.1
-workflows:
-  version: 2
-  just_push:
-      jobs:
-      - pantheon/push
-orbs:
-  pantheon: pantheon-systems/pantheon@0.6.0
 
-# VS Code Extension Version: 1.4.0
+# https://app.circleci.com/pipelines/github/prodigyjoe/test-urban-circleci-site
+
+# ## General Environment Variables set in CircleCI
+
+# * TERMINUS_TOKEN created in https://dashboard.pantheon.io/users/#account/tokens/
+# * DEFAULT_BRANCH set to `main` to ensure our primary branch delivers to dev
+
+# ## Setup Details
+
+# * Review https://pantheon.io/docs/drupal-9#create-a-new-drupal-9-site-with-integrated-composer
+# * Create new site from Drupal 9 upstream: https://dashboard.pantheon.io/sites/create?upstream_id=e96c6794-77fe-4931-9a20-48a2fe1a3789
+# * Clone Pantheon locally, update pantheon.yml to include `build_step: false`
+# * Copy `pantheon.yml` and `pantheon.upstream.yml` into your own repo
+# * Ensure the above environment variables in CircleCI
+
+workflows: #Defines a list of jobs and their run order
+  version: 2
+  build_and_push: #name of workflow(runs job named build and job named push)
+      jobs: #A collection of steps, which run commands/scripts as required. Must declare an executor that is either docker, machine, windows, or macos.
+        - build #Run job called build
+        - pantheon/push:  #Run pantheon orb's job named push
+            requires: #Require a dependency by job name
+              - build #Require a job named build
+            checkout: false #Set pantheon orb's push job's paramater checkout to false
+            terminus_clone_env: live  #Set pantheon orb's push job's paramater terminus_clone_env to live
+            clone_content: false  #Set pantheon orb's push job's paramater clone_content to false
+            env_create_max_time: "15m"  #Set pantheon orb's push job's paramater env_create_max_time to 15 minutes
+            pre-steps:  #Steps executed before any other step in the job. Optional special argument for jobs
+             - checkout #Run pantheon orb's job named checkout
+             - attach_workspace: # ?
+                at: .   # ?
+             - run: #Invoke all command-line programs
+                name: Replace repo .gitignore so built codebase makes it to Pantheon  #Title of the step to be shown in the CircleCI UI
+                command: |  #Run the following commands via shell
+                  rm -vf .gitignore
+                  rm -v pantheon.gitignore .gitignore
+             - run: #Invoke all command-line programs
+                name: Add Salesforce Key to the project root  #Title of the step to be shown in the CircleCI UI
+                command: |  #Run the following commands via shell
+                  set +e  #Run the following commands via shell
+                  cd ~/sitedir
+                  touch salesforce.key
+                  SALEFORCE_UNENCODED_VALUE=$(echo $UI_SALESFORCE_TOKEN | base64 -d)
+                  echo "$SALEFORCE_UNENCODED_VALUE" > ~/sitedir/salesforce.key
+            post-steps: #Steps executed after all the other steps
+            - run:  #Invoke all command-line programs
+                name: Set Pantheon environment connection back to git #Title of the step to be shown in the CircleCI UI
+                command: terminus connection:set "$TERMINUS_SITE.$TERMINUS_ENV" git #Run the following commands via shell
+
+orbs: #map of user selected names or orb definitions
+  # Pantheon Orb source and README: https://github.com/pantheon-systems/circleci-orb
+  # More Pantehon Orb Docs https://circleci.com/developer/orbs/orb/pantheon-systems/pantheon
+  pantheon: pantheon-systems/pantheon@0.6.0 #Invoke pantheon orb
+jobs: #collections of steps, which run commands/scripts as required. key(name of job) : value(map describing the job)
+  build:  #Run job step named build
+    docker: #Run docker executor
+      # Be sure to match this image to the CLI_IMAGE in docksal.env
+      - image: docksal/cli:2.11-php7.4  #Name of custom docker image to use
+        user: docker  #Run the command as user named docker
+    # resource_class: xlarge
+    working_directory: /var/www #The directory to run the step
+    steps:  #A list of steps to be performed
+      - run:  #Invoke all command-line programs
+          name: Prepare /var/www for Docksal image environment  #Title of the step to be shown in the CircleCI UI
+          command: |  #Run the following commands via shell
+            sudo rmdir html
+            sudo chown docker: /var/www
+
+      - checkout  #checkout project source code into the job’s working_directory
+
+      - restore_cache: # special step to restore the dependency cache if `composer.lock` does not change
+          keys:
+            - composer-v1-{{ checksum "composer.lock" }}
+            # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
+            - composer-v1-
+
+      - restore_cache: # special step to restore the dependency cache if `package-lock.json` does not change
+          keys:
+            - node-v1-{{ checksum "package-lock.json" }}
+            # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
+            - node-v1-
+
+      - run:  #Invoke all command-line programs
+          name: Install Composer  #Title of the step to be shown in the CircleCI UI
+          command: |
+            php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+            php -r "if (hash_file('SHA384', 'composer-setup.php') === trim(file_get_contents('https://composer.github.io/installer.sig'))) { echo 'Installer verified'; } else { echo 'Installer invalid'; unlink('composer-setup.php'); } echo PHP_EOL;"
+            php composer-setup.php
+            php -r "unlink('composer-setup.php');"
+
+      - run:  #Invoke all command-line programs
+          name: Display PHP information #Title of the step to be shown in the CircleCI UI
+          command: |
+            php -v
+            php composer.phar --version
+            
+      - run:  #Invoke all command-line programs
+          name: Install project dependencies  #Title of the step to be shown in the CircleCI UI
+          command: php composer.phar install -n
+
+      - run:  #Invoke all command-line programs
+          name: Build and Validate  #Title of the step to be shown in the CircleCI UI
+          command: |
+            export PROJECT_ROOT="$PWD"
+            source ~/.profile
+            nvm install
+            nvm use
+            .docksal/commands/npmrc
+            .docksal/commands/make
+            .docksal/commands/ci-validate
+
+      - save_cache: # special step to save the dependency cache with the `composer.lock` cache key template
+          key: composer-v1-{{ checksum "composer.lock" }}
+          paths:
+            - vendor
+
+      - save_cache: # special step to save the dependency cache with the `package-lock.json` cache key template
+          key: node-v1-{{ checksum "package-lock.json" }}
+          paths:
+            - node_modules
+
+      - persist_to_workspace: #Special step used to persist a temporary file to be used by another job in the workflow
+          root: . #Either an absolute path or a path relative to working_directory
+          paths:  #Glob identifying file(s), or a non-glob path to a directory to add to the shared workspace. Interpreted as relative to the workspace root. Must not be the workspace root itself.
+            - web #(working_directory)/var/www/web
+            - vendor  #(working_directory)/var/www/vendor
+            - web/themes/custom/lyndon/lyndon_build #(working_directory)/var/www/web/themes/custom/lyndon/lyndon_build
+
+# VS Code Extension Version: 1.4.0 
