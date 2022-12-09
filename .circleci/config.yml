@@ -100,16 +100,16 @@ jobs: #collections of steps, which run commands/scripts as required. key(name of
           name: Install project dependencies  #Title of the step to be shown in the CircleCI UI
           command: php composer.phar install -n
 
-      - run:  #Invoke all command-line programs
-          name: Build and Validate  #Title of the step to be shown in the CircleCI UI
-          command: |
-            export PROJECT_ROOT="$PWD"
-            source ~/.profile
-            nvm install
-            nvm use
-            .docksal/commands/npmrc
-            .docksal/commands/make
-            .docksal/commands/ci-validate
+      # - run:  #Invoke all command-line programs
+      #     name: Build and Validate  #Title of the step to be shown in the CircleCI UI
+      #     command: |
+      #       export PROJECT_ROOT="$PWD"
+      #       source ~/.profile
+      #       nvm install
+      #       nvm use
+      #       .docksal/commands/npmrc
+      #       .docksal/commands/make
+      #       .docksal/commands/ci-validate
 
       - save_cache: # special step to save the dependency cache with the `composer.lock` cache key template
           key: composer-v1-{{ checksum "composer.lock" }}
